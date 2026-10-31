@@ -1,0 +1,56 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: |
+          npm install
+          python3 -m pip install pillow
+
+      - name: Create Android project
+        run: |
+          npx cap add android
+          python3 tools/patch_android.py
+          npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk VALIRYAN.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VALIRYAN-apk
+          path: VALIRYAN.apk
+
+      - name: Publish as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest VALIRYAN.apk \
+            --title "VALIRYAN APK (latest)" \
+            --notes "Debug-signed APK. Download VALIRYAN.apk and install it."
